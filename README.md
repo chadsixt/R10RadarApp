@@ -43,3 +43,14 @@ In order to use the putting integration you must
 
 - Install a dotnet 7 sdk if you don't have one already
 - `dotnet run` from project directory
+
+## Signed Windows publish
+
+Run `powershell -ExecutionPolicy Bypass -File build/publish-signed.ps1` to create a
+self-contained, signed Windows x64 deployment in `publish`. The signing certificate
+is created once in the current user's Windows certificate store and reused by later
+builds.
+
+On each target PC, run `Install-R10RadarCertificate.ps1` from the publish folder once
+before launching `R10RadarApp.exe`. This trusts the R10 Radar App publisher for that
+Windows user. Only install the certificate on PCs you control.

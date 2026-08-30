@@ -21,6 +21,9 @@ namespace gspro_r10
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
@@ -38,16 +41,16 @@ namespace gspro_r10
       public int Bottom;
     }
 
+    private const int SW_HIDE = 0;
     private const int SW_SHOW = 5;
     private const int SW_RESTORE = 9;
 
-    public static void ShowConsoleWindow()
+    public static bool ToggleConsoleWindow()
     {
       try
       {
         IntPtr consoleHandle = GetConsoleWindow();
-        
-        // If no console exists, create one
+
         if (consoleHandle == IntPtr.Zero)
         {
           FreeConsole();
@@ -57,20 +60,28 @@ namespace gspro_r10
           consoleHandle = GetConsoleWindow();
         }
 
-        // Show and focus the console window
         if (consoleHandle != IntPtr.Zero)
         {
+          if (IsWindowVisible(consoleHandle))
+          {
+            ShowWindow(consoleHandle, SW_HIDE);
+            return false;
+          }
+
           ShowWindow(consoleHandle, SW_RESTORE);
           SetForegroundWindow(consoleHandle);
+          return true;
         }
       }
       catch (Exception ex)
       {
         System.Diagnostics.Debug.WriteLine($"Console visibility error: {ex.Message}");
       }
+
+      return false;
     }
 
-    private static void EnsureConsoleVisible()
+    private static void EnsureConsoleHidden()
     {
       try
       {
@@ -86,10 +97,9 @@ namespace gspro_r10
           consoleHandle = GetConsoleWindow();
         }
 
-        // Show the console window but don't bring it to the foreground (let the radar window stay on top)
         if (consoleHandle != IntPtr.Zero)
         {
-          ShowWindow(consoleHandle, SW_SHOW);
+          ShowWindow(consoleHandle, SW_HIDE);
         }
       }
       catch (Exception ex)
@@ -101,7 +111,7 @@ namespace gspro_r10
     [STAThread]
     public static void Main()
     {
-      EnsureConsoleVisible();
+      EnsureConsoleHidden();
       ApplicationConfiguration.Initialize();
 
       IConfigurationBuilder builder = new ConfigurationBuilder()

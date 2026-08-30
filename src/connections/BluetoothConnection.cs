@@ -12,6 +12,7 @@ namespace gspro_r10
     private static readonly double METERS_PER_S_TO_MILES_PER_HOUR = 2.2369;
     private static readonly float FEET_TO_METERS = 1 / 3.281f;
     private bool disposedValue;
+    private CancellationTokenSource? interferenceStatusCancellation;
 
     public ConnectionManager ConnectionManager { get; }
     public IConfigurationSection Configuration { get; }
@@ -24,6 +25,7 @@ namespace gspro_r10
       ConnectionManager = connectionManager;
       Configuration = configuration;
       ReconnectInterval = int.Parse(configuration["reconnectInterval"] ?? "5");
+      Program.RadarWindow?.UpdateConnectionStatus("Connecting");
       Task.Run(ConnectToDevice);
 
     }
@@ -34,6 +36,7 @@ namespace gspro_r10
       Device = FindDevice(deviceName);
       if (Device == null)
       {
+        Program.RadarWindow?.UpdateConnectionStatus("Device Not Found");
         BluetoothLogger.Error($"Could not find '{deviceName}' in list of paired devices.");
         BluetoothLogger.Error("Device must be paired through computer bluetooth settings before running");
         BluetoothLogger.Error("If device is paired, make sure name matches exactly what is set in 'bluetoothDeviceName' in settings.json");
@@ -42,6 +45,7 @@ namespace gspro_r10
 
       do
       {
+        Program.RadarWindow?.UpdateConnectionStatus("Connecting");
         BluetoothLogger.Info($"Connecting to {Device.Name}: {Device.Id}");
         Device.Gatt.ConnectAsync().Wait();
 
@@ -56,6 +60,7 @@ namespace gspro_r10
       Device.Gatt.AutoConnect = true;
 
       BluetoothLogger.Info($"Connected to Launch Monitor");
+      Program.RadarWindow?.UpdateConnectionStatus("Connected");
       LaunchMonitor = SetupLaunchMonitor(Device);
       Device.GattServerDisconnected += OnDeviceDisconnected;
     }
@@ -63,6 +68,7 @@ namespace gspro_r10
     private void OnDeviceDisconnected(object? sender, EventArgs args)
     {
       BluetoothLogger.Error("Lost bluetooth connection");
+      Program.RadarWindow?.UpdateConnectionStatus("Reconnecting");
       if (Device != null)
         Device.GattServerDisconnected -= OnDeviceDisconnected;
       LaunchMonitor?.Dispose();
@@ -81,7 +87,19 @@ namespace gspro_r10
       lm.MessageRecieved += (o, e) => BluetoothLogger.Incoming(e.Message?.ToString() ?? string.Empty);
       lm.MessageSent += (o, e) => BluetoothLogger.Outgoing(e.Message?.ToString() ?? string.Empty);
       lm.BatteryLifeUpdated += (o, e) => BluetoothLogger.Info($"Battery Life Updated: {e.Battery}%");
-      lm.Error += (o, e) => BluetoothLogger.Error($"{e.Severity}: {e.Message}");
+      lm.Error += (o, e) =>
+      {
+        BluetoothLogger.Error($"{e.Severity}: {e.Message}");
+        if (e.Code == Error.Types.ErrorCode.RadarSaturation)
+          Program.RadarWindow?.UpdateConnectionStatus("Interference Detected");
+      };
+
+      lm.StateChanged += (o, e) => HandleDeviceState(e.State);
+
+      lm.ReadinessChanged += (o, e) =>
+      {
+        Program.RadarWindow?.UpdateConnectionStatus(e.Ready ? "Ready" : "Connected");
+      };
 
       if (bool.Parse(Configuration["sendStatusChangesToGSP"] ?? "false"))
       {
@@ -102,6 +120,7 @@ namespace gspro_r10
 
       if (!lm.Setup())
       {
+        Program.RadarWindow?.UpdateConnectionStatus("Setup Failed");
         BluetoothLogger.Error("Failed Device Setup");
         return null;
       }
@@ -122,8 +141,48 @@ namespace gspro_r10
       BluetoothLogger.Info($"   Battery: {lm.Battery}%");
       BluetoothLogger.Info($"   Current State: {lm.CurrentState}");
       BluetoothLogger.Info($"   Tilt: {lm.DeviceTilt}");
+      Program.RadarWindow?.UpdateConnectionStatus(lm.Ready ? "Ready" : "Connected");
 
       return lm;
+    }
+
+    private void HandleDeviceState(State.Types.StateType state)
+    {
+      interferenceStatusCancellation?.Cancel();
+      interferenceStatusCancellation?.Dispose();
+      interferenceStatusCancellation = null;
+
+      if (state == State.Types.StateType.InterferenceTest)
+      {
+        var cancellation = new CancellationTokenSource();
+        interferenceStatusCancellation = cancellation;
+        _ = Task.Run(async () =>
+        {
+          try
+          {
+            await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
+            if (!cancellation.IsCancellationRequested &&
+                LaunchMonitor?.CurrentState == State.Types.StateType.InterferenceTest)
+              Program.RadarWindow?.UpdateConnectionStatus("Interference Detected");
+          }
+          catch (OperationCanceledException)
+          {
+          }
+        });
+        return;
+      }
+
+      string? status = state switch
+      {
+        State.Types.StateType.Waiting => "Ready",
+        State.Types.StateType.Recording => "Tracking Shot",
+        State.Types.StateType.Processing => "Processing Shot",
+        State.Types.StateType.Error => "Device Error",
+        _ => null
+      };
+
+      if (status != null)
+        Program.RadarWindow?.UpdateConnectionStatus(status);
     }
 
     private BluetoothDevice? FindDevice(string deviceName)
@@ -168,6 +227,8 @@ namespace gspro_r10
       {
         if (disposing)
         {
+          interferenceStatusCancellation?.Cancel();
+          interferenceStatusCancellation?.Dispose();
           if (Device != null)
             Device.GattServerDisconnected -= OnDeviceDisconnected;
           LaunchMonitor?.Dispose();

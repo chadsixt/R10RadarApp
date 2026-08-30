@@ -25,7 +25,14 @@ namespace gspro_r10.bluetooth
       get { return _currentState; } 
       private set {
         _currentState = value;
-        Ready = value == StateType.Waiting;
+        // A brief interference test is part of the R10's normal cycle. Preserve
+        // readiness until the test persists or the device reports another state.
+        if (value == StateType.Waiting)
+          Ready = true;
+        else if (value != StateType.InterferenceTest)
+          Ready = false;
+
+        StateChanged?.Invoke(this, new StateChangedEventArgs() { State = value });
       }
     }
 
@@ -52,12 +59,20 @@ namespace gspro_r10.bluetooth
       public bool Ready { get; set; }
     }
 
+    public event StateChangedEventHandler? StateChanged;
+    public delegate void StateChangedEventHandler(object sender, StateChangedEventArgs e);
+    public class StateChangedEventArgs: EventArgs
+    {
+      public StateType State { get; set; }
+    }
+
     public event ErrorEventHandler? Error;
     public delegate void ErrorEventHandler(object sender, ErrorEventArgs e);
     public class ErrorEventArgs: EventArgs
     {
       public string? Message { get; set; }
       public Error.Types.Severity Severity { get; set; }
+      public Error.Types.ErrorCode Code { get; set; }
     }
 
     public event MetricsEventHandler? ShotMetrics;
@@ -141,6 +156,7 @@ namespace gspro_r10.bluetooth
         AlertDetails notification = WrapperProtoRequest.Event.Notification.AlertNotification_;
         if (notification.State != null)
         {
+          LogEventOrder("STATE", notification.State.State_.ToString());
           CurrentState = notification.State.State_;
           if (notification.State.State_ == StateType.Standby)
           {
@@ -157,10 +173,18 @@ namespace gspro_r10.bluetooth
         }
         if (notification.Error != null && notification.Error.HasCode)
         {
-          Error?.Invoke(this, new ErrorEventArgs() { Message = $"{notification.Error.Code.ToString()} {notification.Error.DeviceTilt}", Severity = notification.Error.Severity });
+          LogEventOrder("ERROR", $"{notification.Error.Code} severity={notification.Error.Severity}");
+          Error?.Invoke(this, new ErrorEventArgs()
+          {
+            Message = $"{notification.Error.Code} {notification.Error.DeviceTilt}",
+            Severity = notification.Error.Severity,
+            Code = notification.Error.Code
+          });
         }
         if (notification.Metrics != null)
         {
+          double speedMps = notification.Metrics.BallMetrics?.BallSpeed ?? 0;
+          LogEventOrder("METRICS", $"shot={notification.Metrics.ShotId} ballSpeedMps={speedMps:0.000}");
           if (ProcessedShotIDs.Contains(notification.Metrics.ShotId))
           {
             BluetoothLogger.Error($"Received duplicate shot data {notification.Metrics.ShotId}.  Ignoring");
@@ -173,9 +197,18 @@ namespace gspro_r10.bluetooth
         }
         if (notification.TiltCalibration != null)
         {
+          LogEventOrder("TILT", notification.TiltCalibration.Status.ToString());
           DeviceTilt = GetDeviceTilt();
         }
       }
+    }
+
+    private long eventSequence;
+
+    private void LogEventOrder(string eventType, string details)
+    {
+      long sequence = Interlocked.Increment(ref eventSequence);
+      BluetoothLogger.Info($"EVENT {sequence:D6} | {DateTime.UtcNow:O} | {eventType} | {details}");
     }
 
     public Tilt? GetDeviceTilt()
