@@ -35,6 +35,13 @@ if ($LASTEXITCODE -ne 0) {
   throw "dotnet publish failed with exit code $LASTEXITCODE"
 }
 
+$frameworkBuild = Join-Path $projectDirectory "bin\Release\net8.0-windows10.0.19041\win-x64"
+Copy-Item -LiteralPath (Join-Path $frameworkBuild "R10RadarApp.dll") -Destination $OutputDirectory -Force
+Copy-Item -LiteralPath (Join-Path $frameworkBuild "R10RadarApp.deps.json") -Destination $OutputDirectory -Force
+Copy-Item -LiteralPath (Join-Path $frameworkBuild "R10RadarApp.runtimeconfig.json") -Destination $OutputDirectory -Force
+Copy-Item -LiteralPath (Join-Path $projectDirectory "build\Run-R10RadarApp.cmd") -Destination $OutputDirectory -Force
+Copy-Item -LiteralPath (Join-Path $projectDirectory "settings.json") -Destination $OutputDirectory -Force
+
 $executablePath = Join-Path $OutputDirectory "R10RadarApp.exe"
 $signature = Set-AuthenticodeSignature -FilePath $executablePath -Certificate $certificate -HashAlgorithm SHA256
 if ($signature.Status -ne "Valid") {

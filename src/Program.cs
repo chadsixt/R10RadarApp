@@ -44,6 +44,7 @@ namespace gspro_r10
     private const int SW_HIDE = 0;
     private const int SW_SHOW = 5;
     private const int SW_RESTORE = 9;
+    private static bool consoleVisible;
 
     public static bool ToggleConsoleWindow()
     {
@@ -62,14 +63,17 @@ namespace gspro_r10
 
         if (consoleHandle != IntPtr.Zero)
         {
-          if (IsWindowVisible(consoleHandle))
+          if (consoleVisible)
           {
             ShowWindow(consoleHandle, SW_HIDE);
+            consoleVisible = false;
             return false;
           }
 
           ShowWindow(consoleHandle, SW_RESTORE);
+          ShowWindow(consoleHandle, SW_SHOW);
           SetForegroundWindow(consoleHandle);
+          consoleVisible = true;
           return true;
         }
       }
@@ -100,6 +104,7 @@ namespace gspro_r10
         if (consoleHandle != IntPtr.Zero)
         {
           ShowWindow(consoleHandle, SW_HIDE);
+          consoleVisible = false;
         }
       }
       catch (Exception ex)
