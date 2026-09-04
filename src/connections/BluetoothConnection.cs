@@ -251,7 +251,7 @@ namespace gspro_r10
         int shotId = metrics.ShotId > 0 ? (int)metrics.ShotId : 0;
         Console.Title = $"GSP-R10 Radar: {ballSpeedMph:0.0} MPH";
 
-        Program.RadarWindow?.UpdateShot(ballSpeedMph, shotId);
+        Program.RadarWindow?.UpdateShot(ballSpeedMph, shotId, metrics.BallMetrics);
 
         BluetoothLogger.Info($"Radar readout: {ballSpeedMph:0.0} MPH | Club: {clubSpeedMph:0.0} MPH | Shot #{shotId}");
 

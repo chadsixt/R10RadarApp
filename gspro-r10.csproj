@@ -9,7 +9,7 @@
     <Nullable>enable</Nullable>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <VersionPrefix>1.4.0</VersionPrefix>
+    <VersionPrefix>1.5.0</VersionPrefix>
     <AssemblyName>R10RadarApp</AssemblyName>
     <Product>R10 Radar App</Product>
     <Authors>R10 Radar App</Authors>
@@ -20,6 +20,7 @@
   <ItemGroup>
     <None Update="settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="build\Install-R10RadarCertificate.ps1" CopyToPublishDirectory="PreserveNewest" />
+    <None Update='assets\batting-practice-field.png' CopyToOutputDirectory='PreserveNewest' CopyToPublishDirectory='PreserveNewest' />
   </ItemGroup>
 
   <ItemGroup>
